@@ -50,6 +50,49 @@ void parse_args(int argc, char** argv, int& thread_count, std::vector<std::files
 	}
 }
 
+// removes all html tags and then removes all characters except for english alphatnumerical ones and returns false if text is empty
+bool format_text(std::wstring& text)
+{
+	text = std::regex_replace(std::regex_replace(text, std::wregex(L"<([^>]*)>"), L""), std::wregex(L"[(\(\))]|[^(a-za-z\d )]"), L"");
+	transform(text.begin(), text.end(), text.begin(), [](wchar_t c) {return towlower(c); });
+	return text.compare(L"") != 0;
+}
+
+// builds index with word position in each document
+void build_index(std::vector<std::filesystem::path>& files, std::map<std::wstring, std::map<int, std::wstring>>& sub_index, int& thread_count, int id)
+{
+	std::wstring word;
+	int word_pos;
+
+	for (int i = id; i < files.size(); i += thread_count)
+	{
+		// opening files
+		std::wifstream file(files[i]);
+
+		// reading the file into string
+		std::wstring file_content((std::istreambuf_iterator<wchar_t>(file)), std::istreambuf_iterator<wchar_t>());
+
+		// clead html and other symbols
+		if (!format_text(file_content))
+			continue;
+
+
+		// input into subindex
+		std::wistringstream wsstream(file_content);
+		word_pos = 0;
+		while (wsstream >> word)
+		{
+			if (word.compare(L"") != 0)
+			{
+				std::lock_guard<std::mutex> lk(index_mtx);
+				sub_index[word][i].append(std::to_wstring(word_pos) + L" ");
+				word_pos++;
+			}
+		}
+	}
+}
+
+
 int main(int argc, char** argv)
 {
 	timer timer("time spent: ");
@@ -87,6 +130,21 @@ int main(int argc, char** argv)
 			}
 		}
 	}
+
+	std::map<std::wstring, std::map<int, std::wstring>> index;
+
+	// if number of files is less than specified thread count, then change thread count to be one thread per file
+	if (files.size() < thread_count)
+		thread_count = files.size();
+	std::vector<std::thread> threads;
+	for (int i = 1; i < thread_count; i++)
+		threads.emplace_back(build_index, ref(files), std::ref(index), std::ref(thread_count), i);
+
+	build_index(files, index, thread_count, 0);
+
+	// wait for completion
+	for (int i = 0; i < thread_count - 1; i++)
+		threads[i].join();
 
 	return 0;
 }
