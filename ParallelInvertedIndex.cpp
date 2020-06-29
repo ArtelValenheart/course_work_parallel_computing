@@ -50,7 +50,6 @@ void parse_args(int argc, char** argv, int& thread_count, std::vector<std::files
 	}
 }
 
-
 int main(int argc, char** argv)
 {
 	timer timer("time spent: ");
@@ -70,6 +69,23 @@ int main(int argc, char** argv)
 		std::cerr << "invalid thread count or could not get one. valid thread count is in range from 2 to "
 			<< std::thread::hardware_concurrency() << ". exiting..." << std::endl;
 		return 0;
+	}
+
+	std::vector<std::filesystem::path> files;
+	std::ofstream indexed_docs("indexed_docs.txt");
+
+	// assign an id for each document and put paths in 'indexed_docs.txt'. 
+	int doc_id = 0;
+	for (const auto& dir : dirs)
+	{
+		for (const auto& file : std::filesystem::directory_iterator(dir))
+		{
+			if (file.is_regular_file())
+			{
+				files.push_back(file);
+				indexed_docs << doc_id++ << " : " << file.path() << std::endl;
+			}
+		}
 	}
 
 	return 0;
