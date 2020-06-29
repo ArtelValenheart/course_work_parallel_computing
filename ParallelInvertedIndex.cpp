@@ -92,6 +92,19 @@ void build_index(std::vector<std::filesystem::path>& files, std::map<std::wstrin
 	}
 }
 
+void print_index(std::map<std::wstring, std::map<int, std::wstring>>& index)
+{
+	std::wofstream myfile("index.txt");
+
+	for (auto[word, doc] : index)
+	{
+		myfile << word << L":" << std::endl;
+
+		for (auto[doc_id, doc_positions] : doc)
+			myfile << doc_id << L": " << doc_positions << std::endl;
+		myfile << std::endl;
+	}
+}
 
 int main(int argc, char** argv)
 {
@@ -145,6 +158,10 @@ int main(int argc, char** argv)
 	// wait for completion
 	for (int i = 0; i < thread_count - 1; i++)
 		threads[i].join();
+
+	print_index(index);
+
+	std::cout << "index size: " << index.size() << std::endl;
 
 	return 0;
 }
