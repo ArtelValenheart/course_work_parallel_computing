@@ -35,12 +35,17 @@ struct Timer
 };
 
 // command line argument parser
-void parse_args(int argc, char** argv, int& thread_count, std::vector<std::filesystem::path>& paths)
+void parse_args(int argc, char** argv, std::vector<std::filesystem::path>& paths, bool& filter_used, std::string& regex_filter)
 {
 	for (int i = 1; i < argc; i++)
 	{
 		if (argv[i] == std::string("-p"))
 			paths.push_back(argv[i + 1]);
+		if (argv[i] == std::string("-r"))
+		{
+			filter_used = true;
+			regex_filter = argv[i + 1];
+		}
 	}
 }
 
@@ -53,7 +58,7 @@ bool format_text(std::wstring& text)
 }
 
 // builds index with word position in each document
-void build_index(std::vector<std::filesystem::path>& files, std::map<std::wstring, std::map<int, std::wstring>>& sub_index)
+void build_index(std::vector<std::filesystem::path>& files, std::map<std::wstring, std::map<int, std::wstring>>& index)
 {
 	std::wstring word;
 	int word_pos;
@@ -78,8 +83,44 @@ void build_index(std::vector<std::filesystem::path>& files, std::map<std::wstrin
 		{
 			if (word.compare(L"") != 0)
 			{
-				sub_index[word][i].append(std::to_wstring(word_pos) + L" ");
+				index[word][i].append(std::to_wstring(word_pos) + L" ");
 				word_pos++;
+			}
+		}
+	}
+}
+
+void build_document_table(std::vector<std::filesystem::path>& dirs, std::vector<std::filesystem::path>& files, bool& filter_used, std::string& regex_filter)
+{
+	std::ofstream indexed_docs("indexed_docs.txt");
+
+	// assign an id for each document and put paths in 'indexed_docs.txt'. 
+	int doc_id = 0;
+	if (!filter_used)
+	{
+		for (const auto& dir : dirs)
+		{
+			for (const auto& file : std::filesystem::directory_iterator(dir))
+			{
+				if (file.is_regular_file())
+				{
+					files.push_back(file);
+					indexed_docs << doc_id++ << " : " << file.path().string() << std::endl;
+				}
+			}
+		}
+	}
+	else
+	{
+		for (const auto& dir : dirs)
+		{
+			for (const auto& file : std::filesystem::directory_iterator(dir))
+			{
+				if (file.is_regular_file() && std::regex_match(file.path().string(), std::regex(regex_filter)))
+				{
+					files.push_back(file);
+					indexed_docs << doc_id++ << " : " << file.path().string() << std::endl;
+				}
 			}
 		}
 	}
@@ -102,10 +143,12 @@ void print_index(std::map<std::wstring, std::map<int, std::wstring>>& index)
 int main(int argc, char** argv)
 {
 	Timer timer("Time spent: ");
-	int thread_count = 0;
 	std::vector<std::filesystem::path> dirs;
 
-	parse_args(argc, argv, thread_count, dirs);
+	bool filter_used = false;
+	std::string regex_filter;
+
+	parse_args(argc, argv, dirs, filter_used, regex_filter);
 
 	// check if all command line arguments were entered correctly
 	if (dirs.size() == 0)
@@ -115,21 +158,8 @@ int main(int argc, char** argv)
 	}
 
 	std::vector<std::filesystem::path> files;
-	std::ofstream indexed_docs("indexed_docs.txt");
 
-	// assign an id for each document and put paths in 'indexed_docs.txt'. 
-	int doc_id = 0;
-	for (const auto& dir : dirs)
-	{
-		for (const auto& file : std::filesystem::directory_iterator(dir))
-		{
-			if (file.is_regular_file())
-			{
-				files.push_back(file);
-				indexed_docs << doc_id++ << " : " << file.path() << std::endl;
-			}
-		}
-	}
+	build_document_table(dirs, files, filter_used, regex_filter);
 
 	std::map<std::wstring, std::map<int, std::wstring>> index;
 
